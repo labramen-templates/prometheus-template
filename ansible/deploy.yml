@@ -33,21 +33,25 @@
         - /var/lib/prometheus
 
     - name: Get latest Prometheus release version
-      shell: >-
-        curl -fsSL https://api.github.com/repos/prometheus/prometheus/releases/latest |
-        grep -oP '"tag_name":\s*"v\K[^"]+'
-      register: prom_version
+      uri:
+        url: https://api.github.com/repos/prometheus/prometheus/releases/latest
+        return_content: yes
+      register: prom_release
       changed_when: false
+
+    - name: Set Prometheus version fact
+      set_fact:
+        prom_version: "{{ prom_release.json.tag_name | regex_replace('^v', '') }}"
 
     - name: Download Prometheus
       unarchive:
-        src: "https://github.com/prometheus/prometheus/releases/download/v{{ prom_version.stdout }}/prometheus-{{ prom_version.stdout }}.linux-amd64.tar.gz"
+        src: "https://github.com/prometheus/prometheus/releases/download/v{{ prom_version }}/prometheus-{{ prom_version }}.linux-amd64.tar.gz"
         dest: /tmp
         remote_src: yes
 
     - name: Install Prometheus binaries
       copy:
-        src: "/tmp/prometheus-{{ prom_version.stdout }}.linux-amd64/{{ item }}"
+        src: "/tmp/prometheus-{{ prom_version }}.linux-amd64/{{ item }}"
         dest: "/usr/local/bin/{{ item }}"
         owner: prometheus
         group: prometheus
@@ -59,7 +63,7 @@
 
     - name: Install console templates and libraries
       copy:
-        src: "/tmp/prometheus-{{ prom_version.stdout }}.linux-amd64/{{ item }}"
+        src: "/tmp/prometheus-{{ prom_version }}.linux-amd64/{{ item }}"
         dest: "/etc/prometheus/{{ item }}"
         owner: prometheus
         group: prometheus
@@ -70,7 +74,7 @@
 
     - name: Install default prometheus.yml (self-scrape only)
       copy:
-        src: "/tmp/prometheus-{{ prom_version.stdout }}.linux-amd64/prometheus.yml"
+        src: "/tmp/prometheus-{{ prom_version }}.linux-amd64/prometheus.yml"
         dest: /etc/prometheus/prometheus.yml
         owner: prometheus
         group: prometheus
@@ -120,12 +124,12 @@
 
     - name: Clean up download
       file:
-        path: "/tmp/prometheus-{{ prom_version.stdout }}.linux-amd64"
+        path: "/tmp/prometheus-{{ prom_version }}.linux-amd64"
         state: absent
 
     - name: Display success message
       debug:
         msg: >-
-          Prometheus {{ prom_version.stdout }} is running at http://{{ ansible_default_ipv4.address }}:9090.
+          Prometheus {{ prom_version }} is running at http://{{ ansible_default_ipv4.address }}:9090.
           Edit /etc/prometheus/prometheus.yml to add your scrape targets,
           then run 'systemctl restart prometheus' to apply.

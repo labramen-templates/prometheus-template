@@ -1,11 +1,6 @@
 ---
 # Variables here override inventory.ini from LabRamen
 
-# System user
-labramen_user: labramen
-labramen_group: labramen
-labramen_password: "labramen"
-
 # Packages to install
 packages:
   - python3

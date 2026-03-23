@@ -1,0 +1,23 @@
+---
+# Variables here override inventory.ini from LabRamen
+
+# System user
+labramen_user: labramen
+labramen_group: labramen
+labramen_password: "labramen"
+
+# Packages to install
+packages:
+  - python3
+  - python3-pip
+  - python3-venv
+  - python3-passlib
+  - git
+  - curl
+  - vim
+  - htop
+  - net-tools
+  - wget
+  - unzip
+  - nano
+  - ncdu

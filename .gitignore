@@ -1,0 +1,75 @@
+# LabRamen Template - Universal .gitignore
+# Safe defaults for homelab container templates
+
+# Secrets & Credentials (CRITICAL - never commit these!)
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.csr
+id_rsa*
+id_ed25519*
+*.env
+.env.*
+secrets/
+credentials/
+*.password
+*.secret
+
+# Terraform State & Variables (may contain secrets)
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform/
+.terraform.lock.hcl
+
+# Ansible Vault & Sensitive Vars
+vault.yml
+*vault*.yml
+group_vars/*/vault.yml
+host_vars/*/vault.yml
+
+# SSH & Config Files
+.ssh/
+known_hosts
+authorized_keys
+
+# Proxmox & LXC specific
+*.tar.zst
+*.tar.gz
+vzdump-*.log
+
+# Local development & testing
+test/
+scratch/
+playground/
+*.local
+local/
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# OS & Editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.*.sw?
+
+# Backups
+*.backup
+*.bak
+*.orig
+*.~*
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+.cache/

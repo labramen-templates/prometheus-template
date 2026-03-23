@@ -1,0 +1,131 @@
+---
+- name: Deploy Prometheus
+  hosts: all
+  become: true
+
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+
+  tasks:
+    - name: Create prometheus system group
+      group:
+        name: prometheus
+        system: true
+        state: present
+
+    - name: Create prometheus system user
+      user:
+        name: prometheus
+        group: prometheus
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    - name: Create Prometheus directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: prometheus
+        group: prometheus
+        mode: '0755'
+      loop:
+        - /etc/prometheus
+        - /var/lib/prometheus
+
+    - name: Get latest Prometheus release version
+      shell: >-
+        curl -fsSL https://api.github.com/repos/prometheus/prometheus/releases/latest |
+        grep -oP '"tag_name":\s*"v\K[^"]+'
+      register: prom_version
+      changed_when: false
+
+    - name: Download Prometheus
+      unarchive:
+        src: "https://github.com/prometheus/prometheus/releases/download/v{{ prom_version.stdout }}/prometheus-{{ prom_version.stdout }}.linux-amd64.tar.gz"
+        dest: /tmp
+        remote_src: yes
+
+    - name: Install Prometheus binaries
+      copy:
+        src: "/tmp/prometheus-{{ prom_version.stdout }}.linux-amd64/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        owner: prometheus
+        group: prometheus
+        mode: '0755'
+        remote_src: yes
+      loop:
+        - prometheus
+        - promtool
+
+    - name: Install console templates and libraries
+      copy:
+        src: "/tmp/prometheus-{{ prom_version.stdout }}.linux-amd64/{{ item }}"
+        dest: "/etc/prometheus/{{ item }}"
+        owner: prometheus
+        group: prometheus
+        remote_src: yes
+      loop:
+        - consoles
+        - console_libraries
+
+    - name: Install default prometheus.yml (self-scrape only)
+      copy:
+        src: "/tmp/prometheus-{{ prom_version.stdout }}.linux-amd64/prometheus.yml"
+        dest: /etc/prometheus/prometheus.yml
+        owner: prometheus
+        group: prometheus
+        mode: '0644'
+        remote_src: yes
+
+    - name: Create Prometheus systemd service
+      copy:
+        content: |
+          [Unit]
+          Description=Prometheus Monitoring System
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          User=prometheus
+          Group=prometheus
+          Type=simple
+          ExecStart=/usr/local/bin/prometheus \
+            --config.file=/etc/prometheus/prometheus.yml \
+            --storage.tsdb.path=/var/lib/prometheus \
+            --web.console.templates=/etc/prometheus/consoles \
+            --web.console.libraries=/etc/prometheus/console_libraries \
+            --web.listen-address=0.0.0.0:9090
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/prometheus.service
+        mode: '0644'
+
+    - name: Enable and start Prometheus
+      systemd:
+        name: prometheus
+        daemon_reload: yes
+        enabled: yes
+        state: started
+
+    - name: Wait for Prometheus to be ready
+      uri:
+        url: "http://localhost:9090/-/ready"
+        status_code: 200
+      register: prom_health
+      retries: 12
+      delay: 5
+      until: prom_health.status == 200
+
+    - name: Clean up download
+      file:
+        path: "/tmp/prometheus-{{ prom_version.stdout }}.linux-amd64"
+        state: absent
+
+    - name: Display success message
+      debug:
+        msg: >-
+          Prometheus {{ prom_version.stdout }} is running at http://{{ ansible_default_ipv4.address }}:9090.
+          Edit /etc/prometheus/prometheus.yml to add your scrape targets,
+          then run 'systemctl restart prometheus' to apply.

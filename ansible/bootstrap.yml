@@ -1,0 +1,63 @@
+---
+# LabRamen writes the inventory.ini for this playbook
+
+- hosts: proxmox
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Ensure container is running (ok if already running)
+      shell: "pct start {{ container_id }} || true"
+
+    - name: Create 'admin' group if missing
+      shell: "pct exec {{ container_id }} -- groupadd -f admin || true"
+
+    - name: Create user with home and add to admin,sudo (no error if exists)
+      shell: >-
+        pct exec {{ container_id }} -- bash -lc
+        "id -u {{ container_user_name }} >/dev/null 2>&1 ||
+         useradd -m -s /bin/bash -G admin,sudo {{ container_user_name }}"
+
+    - name: Set user password (simple)
+      shell: >-
+        pct exec {{ container_id }} -- bash -lc
+        "printf '{{ container_user_name }}:{{ container_user_password }}\n' | chpasswd"
+
+
+    - name: Ensure .ssh directory exists in container
+      shell: >-
+        pct exec {{ container_id }} -- bash -lc
+        "mkdir -p /home/{{ container_user_name }}/.ssh &&
+         chmod 700 /home/{{ container_user_name }}/.ssh &&
+         chown {{ container_user_name }}:{{ container_user_name }} /home/{{ container_user_name }}/.ssh"
+
+    - name: Add SSH public key to authorized_keys in container
+      shell: >-
+        pct exec {{ container_id }} -- bash -lc
+        "echo '{{ ssh_pubkey }}' >> /home/{{ container_user_name }}/.ssh/authorized_keys &&
+         chmod 600 /home/{{ container_user_name }}/.ssh/authorized_keys &&
+         chown {{ container_user_name }}:{{ container_user_name }} /home/{{ container_user_name }}/.ssh/authorized_keys"
+
+    - name: Ensure SSH key isn't duplicated (make idempotent)
+      shell: >-
+        pct exec {{ container_id }} -- bash -lc
+        "sort -u /home/{{ container_user_name }}/.ssh/authorized_keys -o /home/{{ container_user_name }}/.ssh/authorized_keys"
+
+
+    - name: Turn on SSH password auth in container (simple/robust)
+      shell: >-
+        pct exec {{ container_id }} -- bash -lc
+        'if grep -Eq "^#?PasswordAuthentication[[:space:]]+" /etc/ssh/sshd_config; then
+           sed -ri "s/^#?PasswordAuthentication[[:space:]]+.*/PasswordAuthentication yes/" /etc/ssh/sshd_config;
+         else
+           echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config;
+         fi'
+
+    - name: Restart SSH service inside container (try common variants)
+      shell: >-
+        pct exec {{ container_id }} -- bash -lc
+        "systemctl restart ssh || systemctl restart sshd || service ssh restart || service sshd restart || true"
+
+    - name: Enable SSH service (best-effort)
+      shell: >-
+        pct exec {{ container_id }} -- bash -lc
+        "systemctl enable --now ssh || systemctl enable --now sshd || true"
